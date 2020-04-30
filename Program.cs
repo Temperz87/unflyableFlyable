@@ -140,7 +140,6 @@ class LOL : VTOLMOD
         PitchYawRoll = new Vector3(0f, 0f, 0f);
         FlightInfo FI = targetActor.flightInfo;
         // RefuelPlane rPlane = targetVehicle.GetComponent<RefuelPlane>();
-        Debug.Log("SET VECTOR3!!!");
         Debug.Log("Controlling " + targetVehicle);
         float x = 0f;
         float y = 0f;
@@ -386,6 +385,41 @@ class LOL : VTOLMOD
                     thing.SetBrakes(brakes);
                 }
             }
+
+            // Wing Folding
+            if (Input.GetKeyDown(KeyCode.K))
+            {
+                if (toControl.wingRotator)
+                {
+                    if (toControl.wingRotator.deployed)
+                    {
+                        toControl.wingRotator.SetDefault();
+                    }
+                    else
+                    {
+                        toControl.wingRotator.SetDeployed();
+                    }
+                }
+            }
+
+            // Tail Hook
+            if (Input.GetKeyDown(KeyCode.H))
+            {
+                if (toControl.tailHook)
+                {
+                    toControl.tailHook.ToggleHook();
+                }
+            }
+
+            //  Launch Bar
+            if (Input.GetKeyDown(KeyCode.T))
+            {
+                if (toControl.catHook)
+                {
+                    toControl.catHook.Toggle();
+                }
+            }
+
             // Misc Stuff
             PitchYawRoll.Set(x, y, z);
             control.SetJoystickPYR(PitchYawRoll);
