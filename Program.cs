@@ -19,8 +19,12 @@ class LOL : VTOLMOD
     bool goOn = false;
     bool GoOn = false;
     string speed;
+    string heading;
+    string altitude;
     string Weapon;
     string Ammo;
+    bool radarActive = false;
+    bool hasWM = false;
     public IEnumerator main()
     {
         Vector3 PitchYawRoll = new Vector3();
@@ -97,6 +101,7 @@ class LOL : VTOLMOD
         cam.cam = CammyCam;
         cam.gameObject.SetActive(true);
         cam.AddTarget(FlightSceneManager.instance.playerActor.transform);
+        GameSettings.SetGameSettingValue("HIDE_HELMET", true, true);
         Debug.Log("Cam should be set.");
         VehicleInputManager control = targetVehicle.AddComponent<VehicleInputManager>();
         AutoPilot AP = targetVehicle.GetComponent<AutoPilot>();
@@ -108,19 +113,27 @@ class LOL : VTOLMOD
         GearAnimator gear = toControl.gearAnimator;
         targetVehicle.GetComponent<AIPilot>().enabled = false;
         Radar targetRadar = targetVehicle.GetComponent<Radar>();
-        LockingRadar lTargetRadar = toControl.lockingRadar;
+        LockingRadar lTargetRadar = new LockingRadar();
+        if (targetRadar != null)
+        {
+            lTargetRadar = toControl.lockingRadar;
+            radarActive = true;
+            targetRadar.detectMissiles = true;
+        }
         foreach (var thing in targetVehicle.GetComponents(typeof(Component)))
         {
             Debug.Log(thing);
         }
         WeaponManager wm = targetVehicle.GetComponent<WeaponManager>();
-        wm.SetMasterArmed(true);
-
-        foreach (var internalBays in wm.internalWeaponBays)
+        if (wm != null)
         {
-            internalBays.openOnAnyWeaponMatch = true;
+            hasWM = true;
+            wm.SetMasterArmed(true);
+            foreach (var internalBays in wm.internalWeaponBays)
+            {
+                internalBays.openOnAnyWeaponMatch = true;
+            }
         }
-
         float t = 0f;
         float v = 0f;
         CameraScreenshot CS = new CameraScreenshot();
@@ -128,23 +141,20 @@ class LOL : VTOLMOD
         FlightInfo FI = targetActor.flightInfo;
         // RefuelPlane rPlane = targetVehicle.GetComponent<RefuelPlane>();
         Debug.Log("SET VECTOR3!!!");
-        //Debug.Log("BLOODILY KILLED THE AI PILOT!");
-        //FieldInfo FIYA = LOL.GetType().GetField("firing", BindingFlags.NonPublic | BindingFlags.Instance);
         Debug.Log("Controlling " + targetVehicle);
-        // float factor = 1f;
-        float x = 0;
-        float y = 0;
-        float z = 0;
+        float x = 0f;
+        float y = 0f;
+        float z = 0f;
+        float flaps = 0f;
+        float brakes = 0f;
         int idx = -1;
+        float headingNum = 0;
         bool locked = false;
         Actor lockedTarget = new Actor();
         while (true)
         {
-            if (AP.steerMode != AutoPilot.SteerModes.Aim)
-            {
-                AP.steerMode = AutoPilot.SteerModes.Aim; 
-                Debug.Log("Changed autopilot steer mode to aim.");
-            }
+
+            // Pitch Yaw Roll controls
             if (Input.GetKey(KeyCode.S))
             {
                 x = -1f;
@@ -181,6 +191,8 @@ class LOL : VTOLMOD
             {
                 z = 0f;
             }
+
+            // Tilt Controller
             if (Input.GetKey(KeyCode.Z))
             {
                 if (v >= 90)
@@ -194,6 +206,21 @@ class LOL : VTOLMOD
                     }
                 }
             }
+            if (Input.GetKey(KeyCode.X))
+            {
+                if (v <= 0)
+                { }
+                else
+                {
+                    if (tiltC)
+                    {
+                        v -= 1;
+                        TC.SetTiltImmediate(v);
+                    }
+                }
+            }
+
+            // Screen Shot
             if (Input.GetKeyDown(KeyCode.L))
             {
                 try
@@ -210,23 +237,8 @@ class LOL : VTOLMOD
                     Debug.Log("This dude really tried screenshotting without having the debug cam on, LOSER!");
                 }
             }
-            if (Input.GetKey(KeyCode.B))
-            {
-                if (v <= 0)
-                { }
-                else
-                {
-                    if (tiltC)
-                    {
-                        v -= 1;
-                        TC.SetTiltImmediate(v);
-                    }
-                }
-            }
-            else
-            {
-                // Brake Code
-            }
+
+            // WeaponManager code
             if (wm != null)
             {
                 if (Input.GetKeyDown(KeyCode.R))
@@ -241,8 +253,11 @@ class LOL : VTOLMOD
                 {
                     wm.EndFire();
                 }
+                Weapon = wm.currentEquip.name;
+                Ammo = wm.currentEquip.GetCount().ToString();
             }
-            // LOL.flareCMs[0].SetCount(9999);
+
+            // Gear Toggle
             if (Input.GetKeyDown(KeyCode.G))
             {
                 if (gear != null)
@@ -250,88 +265,141 @@ class LOL : VTOLMOD
                     gear.Toggle();
                 }
             }
-            if (Input.GetKey(KeyCode.LeftControl))
+
+            // Thrrottle code
+            if (Input.GetKey(KeyCode.LeftControl)) // Increase
             {
                 if (t > 0)
                 {
                     t -= 0.0125f;
                 }
             }
-            if (Input.GetKey(KeyCode.LeftShift))
+            if (Input.GetKey(KeyCode.LeftShift)) // Decrease
             {
                 if (t < 1)
                 {
                     t += 0.0125f;
                 }
             }
+
+            // CMS dispenser
             if (Input.GetKey(KeyCode.C))
             {
                 toControl.FireFlares();
                 toControl.FireChaff();
             }
-            if (Input.GetKeyDown(KeyCode.M))
+
+            // Radar code
+            if (targetRadar != null)
             {
-                idx += 1;
-                if (idx > targetRadar.detectedUnits.Count - 1)
+                if (Input.GetKeyDown(KeyCode.M)) // Move right in the array
                 {
-                    idx = targetRadar.detectedUnits.Count - 1;
-                }
-                if (targetRadar.detectedUnits.Count > 0)
-                {
-                    lockedTarget = targetRadar.detectedUnits[idx];
-                    sRadarTargets = lockedTarget.actorName;
-                }
-            }
-            if (Input.GetKeyDown(KeyCode.N))
-            {
-                idx -= 1;
-                if (idx < 0)
-                {
-                    idx = 0;
-                }
-                if (targetRadar.detectedUnits.Count > 0)
-                {
-                    lockedTarget = targetRadar.detectedUnits[idx];
-                    sRadarTargets = lockedTarget.actorName;
-                }
-            }
-            if (Input.GetKeyDown(KeyCode.J))
-            {
-                if (!locked)
-                {
+                    idx += 1;
+                    if (idx > targetRadar.detectedUnits.Count - 1)
+                    {
+                        idx = targetRadar.detectedUnits.Count - 1;
+                    }
                     if (targetRadar.detectedUnits.Count > 0)
                     {
-                        if (idx >= 0)
+                        lockedTarget = targetRadar.detectedUnits[idx];
+                        sRadarTargets = lockedTarget.actorName;
+                    }
+                }
+                if (Input.GetKeyDown(KeyCode.N)) // Move left in the array
+                {
+                    idx -= 1;
+                    if (idx < 0)
+                    {
+                        idx = 0;
+                    }
+                    if (targetRadar.detectedUnits.Count > 0)
+                    {
+                        lockedTarget = targetRadar.detectedUnits[idx];
+                        sRadarTargets = lockedTarget.actorName;
+                    }
+                }
+                if (Input.GetKeyDown(KeyCode.J)) // Lock
+                {
+                    if (!locked)
+                    {
+                        if (targetRadar.detectedUnits.Count > 0)
                         {
-                            if (lTargetRadar.GetLock(lockedTarget))
+                            if (idx >= 0)
                             {
-                                lRadarTargets = lockedTarget.actorName;
-                                locked = !locked;
+                                if (lTargetRadar.GetLock(lockedTarget))
+                                {
+                                    lRadarTargets = lockedTarget.actorName;
+                                    locked = !locked;
+                                }
                             }
                         }
                     }
+                    else
+                    {
+                        lTargetRadar.Unlock();
+                        lRadarTargets = "No lock";
+                        locked = !locked;
+                    }
                 }
-                else 
+                radarTargets = "";
+                foreach (var thing in targetRadar.detectedUnits) 
                 {
-                    lTargetRadar.Unlock();
-                    lRadarTargets = "No lock";
-                    locked = !locked;
+                    radarTargets += thing + " " + Mathf.Round(VectorUtils.Bearing(targetRadar.transform.position, thing.position)).ToString() + " " + Mathf.Round((targetRadar.transform.position - thing.position).magnitude).ToString() + " " + Mathf.Round((WaterPhysics.GetAltitude(thing.position))).ToString() + "\n";
                 }
             }
 
+            // Flaps
+            if (Input.GetKeyDown(KeyCode.F))
+            {
+                if (flaps == 0f)
+                {
+                    flaps = .5f;
+                }
+                else if (flaps == .5f)
+                {
+                    flaps = 1f;
+                }
+                else
+                {
+                    flaps = 0f;
+                }
+                foreach (var thing in toControl.autoPilot.outputs)
+                {
+                    thing.SetFlaps(flaps);
+                }
+            }
+
+
+            // Brakes
+            if (Input.GetKeyDown(KeyCode.B))
+            {
+                if (brakes == 0f)
+                {
+                    brakes = 1f;
+                }
+                else
+                {
+                    brakes = 0f;
+                }
+                foreach (var thing in toControl.autoPilot.outputs)
+                {
+                    thing.SetBrakes(brakes);
+                }
+            }
+            // Misc Stuff
             PitchYawRoll.Set(x, y, z);
             control.SetJoystickPYR(PitchYawRoll);
             foreach (ModuleEngine Engine in Engines)
             {
                 Engine.SetThrottle(t);
             }
-            radarTargets = "";
-            foreach (var thing in targetRadar.detectedUnits)
+            headingNum = VectorUtils.SignedAngle(Vector3.forward, targetActor.transform.forward, Vector3.right);
+            if (headingNum < 0f)
             {
-                radarTargets += thing + " ";
+                headingNum += 360f;
             }
-            Weapon = wm.currentEquip.name;
-            Ammo = wm.currentEquip.GetCount().ToString();
+            heading = Mathf.Round(headingNum).ToString();
+            altitude = Mathf.Round((WaterPhysics.GetAltitude(targetActor.position))).ToString();
             speed = FI.surfaceSpeed.ToString();
             yield return null;
         }
@@ -340,12 +408,20 @@ class LOL : VTOLMOD
     {
         if (GoOn)
         {
-            GUI.Label(new Rect(20f, 20f, 150000f, 20f), "Speed: " + speed);
-            GUI.Label(new Rect(20f, 40f, 150000f, 20f), "Weapon: " + Weapon);
-            GUI.Label(new Rect(20f, 60f, 150000f, 20f), "Ammo: " + Ammo);
-            GUI.Label(new Rect(2200f, 1220f, 150000f, 21f), "Radar Targets: " + radarTargets);
-            GUI.Label(new Rect(2200f, 1240f, 150000f, 21f), "Selected Target: " + sRadarTargets);
-            GUI.Label(new Rect(2200f, 1260f, 150000f, 21f), "Locked Target: " + lRadarTargets);
+            GUI.Label(new Rect(20f, 20f, 150000f, 150000f), "Speed: " + speed);
+            GUI.Label(new Rect(20f, 40f, 150000f, 150000f), "Altitude: " + altitude);
+            GUI.Label(new Rect(20f, 60f, 150000f, 150000f), "Heading: " + heading);
+            if (hasWM)
+            {
+                GUI.Label(new Rect(20f, 80f, 150000f, 20f), "Weapon: " + Weapon);
+                GUI.Label(new Rect(20f, 100f, 150000f, 20f), "Ammo: " + Ammo);
+            }
+            if (radarActive)
+            {
+                GUI.Label(new Rect(2200f, 20f, 150000f, 150000f), "Radar Targets - BRA" + "\n" + radarTargets);
+                GUI.Label(new Rect(2200f, 1220f, 150000f, 21f), "Selected Target: " + sRadarTargets);
+                GUI.Label(new Rect(2200f, 1240f, 150000f, 21f), "Locked Target: " + lRadarTargets);
+            }
         }
         if (goOn& !GoOn)
         {
