@@ -13,10 +13,14 @@ class LOL : VTOLMOD
 {
     string Stuff = "";
     string toEdit = "What Controller? Delete the text and enter the number next to the controller, then hit the giant button.";
+    string radarTargets = "";
+    string sRadarTargets = "";
+    string lRadarTargets = "No lock";
     bool goOn = false;
     bool GoOn = false;
     string speed;
     string Weapon;
+    string Ammo;
     public IEnumerator main()
     {
         Vector3 PitchYawRoll = new Vector3();
@@ -78,7 +82,6 @@ class LOL : VTOLMOD
         Actor targetActor = targetVehicle.GetComponent<Actor>();
         Camera CammyCam = Cammy.AddComponent<Camera>();
         CameraFollowMe cam = Cammy.AddComponent<CameraFollowMe>();
-
         cam.targets = new List<Transform>();
         Debug.Log("Target list created.");
         cam.AddTarget(targetActor.transform);
@@ -104,6 +107,8 @@ class LOL : VTOLMOD
         control.wheelSteerOutputs = targetVehicle.GetComponents<WheelsController>();
         GearAnimator gear = toControl.gearAnimator;
         targetVehicle.GetComponent<AIPilot>().enabled = false;
+        Radar targetRadar = targetVehicle.GetComponent<Radar>();
+        LockingRadar lTargetRadar = toControl.lockingRadar;
         foreach (var thing in targetVehicle.GetComponents(typeof(Component)))
         {
             Debug.Log(thing);
@@ -121,7 +126,7 @@ class LOL : VTOLMOD
         CameraScreenshot CS = new CameraScreenshot();
         PitchYawRoll = new Vector3(0f, 0f, 0f);
         FlightInfo FI = targetActor.flightInfo;
-        RefuelPlane rPlane = targetVehicle.GetComponent<RefuelPlane>();
+        // RefuelPlane rPlane = targetVehicle.GetComponent<RefuelPlane>();
         Debug.Log("SET VECTOR3!!!");
         //Debug.Log("BLOODILY KILLED THE AI PILOT!");
         //FieldInfo FIYA = LOL.GetType().GetField("firing", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -130,6 +135,9 @@ class LOL : VTOLMOD
         float x = 0;
         float y = 0;
         float z = 0;
+        int idx = -1;
+        bool locked = false;
+        Actor lockedTarget = new Actor();
         while (true)
         {
             if (AP.steerMode != AutoPilot.SteerModes.Aim)
@@ -261,8 +269,54 @@ class LOL : VTOLMOD
                 toControl.FireFlares();
                 toControl.FireChaff();
             }
-            if (Input.GetKey(KeyCode.K))
+            if (Input.GetKeyDown(KeyCode.M))
             {
+                idx += 1;
+                if (idx > targetRadar.detectedUnits.Count - 1)
+                {
+                    idx = targetRadar.detectedUnits.Count - 1;
+                }
+                if (targetRadar.detectedUnits.Count > 0)
+                {
+                    lockedTarget = targetRadar.detectedUnits[idx];
+                    sRadarTargets = lockedTarget.actorName;
+                }
+            }
+            if (Input.GetKeyDown(KeyCode.N))
+            {
+                idx -= 1;
+                if (idx < 0)
+                {
+                    idx = 0;
+                }
+                if (targetRadar.detectedUnits.Count > 0)
+                {
+                    lockedTarget = targetRadar.detectedUnits[idx];
+                    sRadarTargets = lockedTarget.actorName;
+                }
+            }
+            if (Input.GetKeyDown(KeyCode.J))
+            {
+                if (!locked)
+                {
+                    if (targetRadar.detectedUnits.Count > 0)
+                    {
+                        if (idx >= 0)
+                        {
+                            if (lTargetRadar.GetLock(lockedTarget))
+                            {
+                                lRadarTargets = lockedTarget.actorName;
+                                locked = !locked;
+                            }
+                        }
+                    }
+                }
+                else 
+                {
+                    lTargetRadar.Unlock();
+                    lRadarTargets = "No lock";
+                    locked = !locked;
+                }
             }
 
             PitchYawRoll.Set(x, y, z);
@@ -271,7 +325,13 @@ class LOL : VTOLMOD
             {
                 Engine.SetThrottle(t);
             }
+            radarTargets = "";
+            foreach (var thing in targetRadar.detectedUnits)
+            {
+                radarTargets += thing + " ";
+            }
             Weapon = wm.currentEquip.name;
+            Ammo = wm.currentEquip.GetCount().ToString();
             speed = FI.surfaceSpeed.ToString();
             yield return null;
         }
@@ -282,6 +342,10 @@ class LOL : VTOLMOD
         {
             GUI.Label(new Rect(20f, 20f, 150000f, 20f), "Speed: " + speed);
             GUI.Label(new Rect(20f, 40f, 150000f, 20f), "Weapon: " + Weapon);
+            GUI.Label(new Rect(20f, 60f, 150000f, 20f), "Ammo: " + Ammo);
+            GUI.Label(new Rect(2200f, 1220f, 150000f, 21f), "Radar Targets: " + radarTargets);
+            GUI.Label(new Rect(2200f, 1240f, 150000f, 21f), "Selected Target: " + sRadarTargets);
+            GUI.Label(new Rect(2200f, 1260f, 150000f, 21f), "Locked Target: " + lRadarTargets);
         }
         if (goOn& !GoOn)
         {
