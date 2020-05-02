@@ -19,12 +19,64 @@ class LOL : VTOLMOD
     bool goOn = false;
     bool GoOn = false;
     string speed;
-    string heading;
+    public string SpeedLabel()
+    {
+        switch (MeasurementManager.instance.airspeedMode)
+        {
+            case MeasurementManager.SpeedModes.MetersPerSecond:
+                return "m/s";
+            case MeasurementManager.SpeedModes.KilometersPerHour:
+                return "KPH";
+            case MeasurementManager.SpeedModes.Knots:
+                return "kt";
+            case MeasurementManager.SpeedModes.MilesPerHour:
+                return "MPH";
+            case MeasurementManager.SpeedModes.FeetPerSecond:
+                return "ft/s";
+            case MeasurementManager.SpeedModes.Mach:
+                return "M";
+            default:
+                return "Unhandled unit";
+        }
+    }
     string altitude;
+    public string AltitudeLabel()
+    {
+        MeasurementManager.AltitudeModes altitudeMode = MeasurementManager.instance.altitudeMode;
+        if (altitudeMode == MeasurementManager.AltitudeModes.Meters)
+        {
+            return "m";
+        }
+        if (altitudeMode != MeasurementManager.AltitudeModes.Feet)
+        {
+            return "?";
+        }
+        return "ft";
+    }
+    public string DistanceLabel()
+    {
+        switch (MeasurementManager.instance.distanceMode)
+        {
+            case MeasurementManager.DistanceModes.Meters:
+                return "km";
+            case MeasurementManager.DistanceModes.NautMiles:
+                return "nm";
+            case MeasurementManager.DistanceModes.Feet:
+                return "ft";
+            case MeasurementManager.DistanceModes.Miles:
+                return "mi";
+            default:
+                return "Unhandled unit";
+        }
+    }
+    string heading;
     string Weapon;
     string Ammo;
+    string Missiles;
     bool radarActive = false;
+    bool lockingRadar = false;
     bool hasWM = false;
+    bool MissileDetected = false;
     public IEnumerator main()
     {
         Vector3 PitchYawRoll = new Vector3();
@@ -112,13 +164,16 @@ class LOL : VTOLMOD
         control.wheelSteerOutputs = targetVehicle.GetComponents<WheelsController>();
         GearAnimator gear = toControl.gearAnimator;
         targetVehicle.GetComponent<AIPilot>().enabled = false;
-        Radar targetRadar = targetVehicle.GetComponent<Radar>();
+        Radar targetRadar = toControl.detectionRadar;
         LockingRadar lTargetRadar = new LockingRadar();
         if (targetRadar != null)
         {
             lTargetRadar = toControl.lockingRadar;
             radarActive = true;
-            targetRadar.detectMissiles = true;
+        }
+        if (lTargetRadar != null)
+        {
+            lockingRadar = true; 
         }
         foreach (var thing in targetVehicle.GetComponents(typeof(Component)))
         {
@@ -134,6 +189,8 @@ class LOL : VTOLMOD
                 internalBays.openOnAnyWeaponMatch = true;
             }
         }
+        MissileDetector rwr = toControl.rwr;
+        MeasurementManager MM = MeasurementManager.instance;
         float t = 0f;
         float v = 0f;
         CameraScreenshot CS = new CameraScreenshot();
@@ -149,7 +206,7 @@ class LOL : VTOLMOD
         int idx = -1;
         float headingNum = 0;
         bool locked = false;
-        Actor lockedTarget = new Actor();
+        Actor lockSelection = new Actor();
         while (true)
         {
 
@@ -244,13 +301,22 @@ class LOL : VTOLMOD
                 {
                     wm.CycleActiveWeapons();
                 }
+
                 if (Input.GetKeyDown(KeyCode.Space))
                 {
-                    wm.StartFire();
+                    if (wm.currentEquip is HPEquipIRML || wm.currentEquip is HPEquipRadarML)
+                    {
+                        wm.SingleFire();
+                    }
+                    else
+                    {
+                        wm.StartFire();
+                    }
                 }
                 if (Input.GetKeyUp(KeyCode.Space))
                 {
-                    wm.EndFire();
+                    if (!(wm.currentEquip is  HPEquipIRML || wm.currentEquip is HPEquipRadarML))
+                        wm.EndFire();
                 }
                 Weapon = wm.currentEquip.name;
                 Ammo = wm.currentEquip.GetCount().ToString();
@@ -291,59 +357,89 @@ class LOL : VTOLMOD
             // Radar code
             if (targetRadar != null)
             {
-                if (Input.GetKeyDown(KeyCode.M)) // Move right in the array
+                if (lTargetRadar != null)
                 {
-                    idx += 1;
-                    if (idx > targetRadar.detectedUnits.Count - 1)
+                    if (Input.GetKeyDown(KeyCode.M)) // Move right in the array
                     {
-                        idx = targetRadar.detectedUnits.Count - 1;
-                    }
-                    if (targetRadar.detectedUnits.Count > 0)
-                    {
-                        lockedTarget = targetRadar.detectedUnits[idx];
-                        sRadarTargets = lockedTarget.actorName;
-                    }
-                }
-                if (Input.GetKeyDown(KeyCode.N)) // Move left in the array
-                {
-                    idx -= 1;
-                    if (idx < 0)
-                    {
-                        idx = 0;
-                    }
-                    if (targetRadar.detectedUnits.Count > 0)
-                    {
-                        lockedTarget = targetRadar.detectedUnits[idx];
-                        sRadarTargets = lockedTarget.actorName;
-                    }
-                }
-                if (Input.GetKeyDown(KeyCode.J)) // Lock
-                {
-                    if (!locked)
-                    {
+                        idx += 1;
+                        if (idx > targetRadar.detectedUnits.Count - 1)
+                        {
+                            idx = targetRadar.detectedUnits.Count - 1;
+                        }
                         if (targetRadar.detectedUnits.Count > 0)
                         {
-                            if (idx >= 0)
+                            lockSelection = targetRadar.detectedUnits[idx];
+                            sRadarTargets = lockSelection.actorName;
+                        }
+                    }
+                    if (Input.GetKeyDown(KeyCode.N)) // Move left in the array
+                    {
+                        idx -= 1;
+                        if (idx < 0)
+                        {
+                            idx = 0;
+                        }
+                        if (targetRadar.detectedUnits.Count > 0)
+                        {
+                            lockSelection = targetRadar.detectedUnits[idx];
+                            sRadarTargets = lockSelection.actorName;
+                        }
+                    }
+                    if (Input.GetKeyDown(KeyCode.J)) // Lock
+                    {
+                        if (!locked)
+                        {
+                            if (targetRadar.detectedUnits.Count > 0)
                             {
-                                if (lTargetRadar.GetLock(lockedTarget))
+                                if (idx >= 0)
                                 {
-                                    lRadarTargets = lockedTarget.actorName;
-                                    locked = !locked;
+                                    if (lTargetRadar.GetLock(lockSelection))
+                                    {
+                                        lRadarTargets = lockSelection.ToString();
+                                        locked = !locked;
+                                    }
                                 }
                             }
                         }
-                    }
-                    else
-                    {
-                        lTargetRadar.Unlock();
-                        lRadarTargets = "No lock";
-                        locked = !locked;
+                        else
+                        {
+                            lTargetRadar.Unlock();
+                            lRadarTargets = "No lock";
+                            locked = !locked;
+                        }
+                        if (!lTargetRadar.IsLocked())
+                        {
+                            lRadarTargets = "No lock";
+                            if (locked)
+                            {
+                                locked = !locked;
+                            }
+                        }
                     }
                 }
                 radarTargets = "";
-                foreach (var thing in targetRadar.detectedUnits) 
+                foreach (var thing in targetRadar.detectedUnits)
                 {
-                    radarTargets += thing + " " + Mathf.Round(VectorUtils.Bearing(targetRadar.transform.position, thing.position)).ToString() + " " + Mathf.Round((targetRadar.transform.position - thing.position).magnitude).ToString() + " " + Mathf.Round((WaterPhysics.GetAltitude(thing.position))).ToString() + "\n";
+                    headingNum = Mathf.Round(VectorUtils.SignedAngle(Vector3.forward, thing.transform.forward, Vector3.right));
+                    if (headingNum < 0)
+                    {
+                        headingNum += 360;
+                    }
+                    radarTargets += thing + " " + headingNum.ToString() + " " + MM.ConvertedDistance(Mathf.Round((targetRadar.transform.position - thing.position).magnitude)).ToString() + " " + DistanceLabel() + " " + MM.ConvertedAltitude(Mathf.Round((WaterPhysics.GetAltitude(thing.position)))).ToString() + " " + AltitudeLabel() + "\n";
+                }
+            }
+
+            // RWR code
+            if (rwr)
+            {
+                Missiles = "";
+                if (rwr.missileDetected)
+                {
+                    MissileDetected = true;
+                    foreach (var Missile in rwr.detectedMissiles)
+                    {
+                        Missiles += Missile.ToString() + " " + Mathf.Round(VectorUtils.SignedAngle(Vector3.forward, Missile.transform.forward, Vector3.right)).ToString() + " " + MM.ConvertedDistance(Mathf.Round((rwr.transform.position - Missile.transform.position).magnitude)).ToString() + " " + DistanceLabel() + " " + MM.ConvertedAltitude(Mathf.Round((WaterPhysics.GetAltitude(Missile.transform.position)))).ToString() + " " + AltitudeLabel() + "\n";
+                    }
                 }
             }
 
@@ -367,7 +463,6 @@ class LOL : VTOLMOD
                     thing.SetFlaps(flaps);
                 }
             }
-
 
             // Brakes
             if (Input.GetKeyDown(KeyCode.B))
@@ -432,9 +527,9 @@ class LOL : VTOLMOD
             {
                 headingNum += 360f;
             }
-            heading = Mathf.Round(headingNum).ToString();
-            altitude = Mathf.Round((WaterPhysics.GetAltitude(targetActor.position))).ToString();
-            speed = FI.surfaceSpeed.ToString();
+            heading = FI.heading.ToString();
+            altitude = MM.ConvertedAltitude(FI.altitudeASL).ToString() + " " + AltitudeLabel();
+            speed = MM.ConvertedSpeed(FI.surfaceSpeed).ToString() + " " + SpeedLabel();
             yield return null;
         }
     }
@@ -453,8 +548,15 @@ class LOL : VTOLMOD
             if (radarActive)
             {
                 GUI.Label(new Rect(2200f, 20f, 150000f, 150000f), "Radar Targets - BRA" + "\n" + radarTargets);
-                GUI.Label(new Rect(2200f, 1220f, 150000f, 21f), "Selected Target: " + sRadarTargets);
-                GUI.Label(new Rect(2200f, 1240f, 150000f, 21f), "Locked Target: " + lRadarTargets);
+                if (lockingRadar)
+                {
+                    GUI.Label(new Rect(2200f, 1220f, 150000f, 21f), "Selected Target: " + sRadarTargets);
+                    GUI.Label(new Rect(2200f, 1240f, 150000f, 21f), "Locked Target: " + lRadarTargets);
+                }
+            }
+            if (MissileDetected)
+            {
+                GUI.Label(new Rect(20f, 120f, 150000f, 150000f), "MISSILE(S) DETECTED! - BRA\n" + Missiles);
             }
         }
         if (goOn& !GoOn)
