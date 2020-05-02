@@ -19,7 +19,7 @@ class LOL : VTOLMOD
     bool goOn = false;
     bool GoOn = false;
     string speed;
-    public string SpeedLabel()
+    public string SpeedLabel() // Too Long?
     {
         switch (MeasurementManager.instance.airspeedMode)
         {
