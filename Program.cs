@@ -7,18 +7,17 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using System.Reflection;
 using Harmony;
-using System.Windows.Forms;
 
 class LOL : VTOLMOD
 {
-    string Stuff = "";
-    string toEdit = "What Controller? Delete the text and enter the number next to the controller, then hit the giant button.";
-    string radarTargets = "";
-    string sRadarTargets = "";
-    string lRadarTargets = "No lock";
-    bool goOn = false;
-    bool GoOn = false;
-    string speed;
+    private string Stuff = "";
+    private string toEdit = "What Controller? Delete the text and enter the number next to the controller, then hit the giant button.";
+    private string radarTargets = "";
+    private string sRadarTargets = "";
+    private string lRadarTargets = "No lock";
+    private bool goOn = false;
+    private bool GoOn = false;
+    private string speed;
     public string SpeedLabel()
     {
         switch (MeasurementManager.instance.airspeedMode)
@@ -87,12 +86,16 @@ class LOL : VTOLMOD
         }
         foreach (var thing in FindObjectsOfType<AIPilot>())
         {
-            Debug.Log("Controller " + thing);
             Stuff += thing.gameObject.name + " ";
         }
         goOn = true;
         while (GoOn == false)
         {
+            Stuff = "";
+            foreach (var thing in FindObjectsOfType<AIPilot>())
+            {
+                Stuff += thing.gameObject.name + " ";
+            }
             yield return null;
         }
         AIPilot toControl = new AIPilot();
@@ -136,6 +139,7 @@ class LOL : VTOLMOD
         GameObject empty = new GameObject();
         GameObject Cammy = Instantiate(empty, transform.position, Quaternion.identity);
         Actor targetActor = targetVehicle.GetComponent<Actor>();
+       //  targetActor.team = Teams.Allied;
         Camera CammyCam = Cammy.AddComponent<Camera>();
         CameraFollowMe cam = Cammy.AddComponent<CameraFollowMe>();
         cam.targets = new List<Transform>();
@@ -168,6 +172,7 @@ class LOL : VTOLMOD
         LockingRadar lTargetRadar = new LockingRadar();
         if (targetRadar != null)
         {
+            targetRadar.teamsToDetect = Radar.DetectionTeams.Both;
             lTargetRadar = toControl.lockingRadar;
             radarActive = true;
         }
@@ -197,19 +202,32 @@ class LOL : VTOLMOD
         PitchYawRoll = new Vector3(0f, 0f, 0f);
         FlightInfo FI = targetActor.flightInfo;
         // RefuelPlane rPlane = targetVehicle.GetComponent<RefuelPlane>();
-        Debug.Log("Controlling " + targetVehicle);
         float x = 0f;
         float y = 0f;
         float z = 0f;
         float flaps = 0f;
         float brakes = 0f;
         int idx = -1;
+        int p = 2;
         float headingNum = 0;
         bool locked = false;
+        bool tDep = false;
+        bool hDep = false;
+        if (toControl.tailHook != null)
+        {
+            tDep = toControl.tailHook.isDeployed;
+        }
+        if (toControl.catHook != null)
+        {
+            hDep = toControl.catHook.deployed;
+        }
+        infAmmo iA = targetVehicle.AddComponent<infAmmo>();
+        iA.wepMan = wm;
+        iA.enabled = false;
         Actor lockSelection = new Actor();
+        Debug.Log("Controlling " + targetVehicle);
         while (true)
         {
-
             // Pitch Yaw Roll controls
             if (Input.GetKey(KeyCode.S))
             {
@@ -301,22 +319,44 @@ class LOL : VTOLMOD
                 {
                     wm.CycleActiveWeapons();
                 }
-
-                if (Input.GetKeyDown(KeyCode.Space))
+                if (iA.enabled)
                 {
-                    if (wm.currentEquip is HPEquipIRML || wm.currentEquip is HPEquipRadarML)
+
+                    if (Input.GetKey(KeyCode.Space))
                     {
-                        wm.SingleFire();
+                        if (wm.currentEquip is HPEquipIRML || wm.currentEquip is HPEquipRadarML)
+                        {
+                            wm.SingleFire();
+                        }
+                        else
+                        {
+                            wm.StartFire();
+                        }
                     }
-                    else
+                    if (Input.GetKeyUp(KeyCode.Space))
                     {
-                        wm.StartFire();
+                        if (!(wm.currentEquip is HPEquipIRML || wm.currentEquip is HPEquipRadarML))
+                            wm.EndFire();
                     }
                 }
-                if (Input.GetKeyUp(KeyCode.Space))
+                else
                 {
-                    if (!(wm.currentEquip is  HPEquipIRML || wm.currentEquip is HPEquipRadarML))
-                        wm.EndFire();
+                    if (Input.GetKeyDown(KeyCode.Space))
+                    {
+                        if (wm.currentEquip is HPEquipIRML || wm.currentEquip is HPEquipRadarML)
+                        {
+                            wm.SingleFire();
+                        }
+                        else
+                        {
+                            wm.StartFire();
+                        }
+                    }
+                    if (Input.GetKeyUp(KeyCode.Space))
+                    {
+                        if (!(wm.currentEquip is HPEquipIRML || wm.currentEquip is HPEquipRadarML))
+                            wm.EndFire();
+                    }
                 }
                 Weapon = wm.currentEquip.name;
                 Ammo = wm.currentEquip.GetCount().ToString();
@@ -407,13 +447,13 @@ class LOL : VTOLMOD
                             lRadarTargets = "No lock";
                             locked = !locked;
                         }
-                        if (!lTargetRadar.IsLocked())
+                    }
+                    if (!lTargetRadar.IsLocked())
+                    {
+                        lRadarTargets = "Lock Dropped";
+                        if (locked)
                         {
-                            lRadarTargets = "No lock";
-                            if (locked)
-                            {
-                                locked = !locked;
-                            }
+                            locked = !locked;
                         }
                     }
                 }
@@ -430,7 +470,7 @@ class LOL : VTOLMOD
             }
 
             // RWR code
-            if (rwr)
+            if (rwr != null)
             {
                 Missiles = "";
                 if (rwr.missileDetected)
@@ -438,7 +478,12 @@ class LOL : VTOLMOD
                     MissileDetected = true;
                     foreach (var Missile in rwr.detectedMissiles)
                     {
-                        Missiles += Missile.ToString() + " " + Mathf.Round(VectorUtils.SignedAngle(Vector3.forward, Missile.transform.forward, Vector3.right)).ToString() + " " + MM.ConvertedDistance(Mathf.Round((rwr.transform.position - Missile.transform.position).magnitude)).ToString() + " " + DistanceLabel() + " " + MM.ConvertedAltitude(Mathf.Round((WaterPhysics.GetAltitude(Missile.transform.position)))).ToString() + " " + AltitudeLabel() + "\n";
+                        headingNum = Mathf.Round(VectorUtils.SignedAngle(Vector3.forward, Missile.transform.forward, Vector3.right));
+                        if (headingNum < 0)
+                        {
+                            headingNum += 360;
+                        }
+                        Missiles += Missile.ToString() + " " + headingNum.ToString() + " " + MM.ConvertedDistance(Mathf.Round((rwr.transform.position - Missile.transform.position).magnitude)).ToString() + " " + DistanceLabel() + " " + MM.ConvertedAltitude(Mathf.Round((WaterPhysics.GetAltitude(Missile.transform.position)))).ToString() + " " + AltitudeLabel() + "\n";
                     }
                 }
             }
@@ -484,7 +529,7 @@ class LOL : VTOLMOD
             // Wing Folding
             if (Input.GetKeyDown(KeyCode.K))
             {
-                if (toControl.wingRotator)
+                if (toControl.wingRotator != null)
                 {
                     if (toControl.wingRotator.deployed)
                     {
@@ -500,19 +545,43 @@ class LOL : VTOLMOD
             // Tail Hook
             if (Input.GetKeyDown(KeyCode.H))
             {
-                if (toControl.tailHook)
+                if (toControl.tailHook != null)
                 {
-                    toControl.tailHook.ToggleHook();
+                    if (tDep)
+                    {
+                        toControl.tailHook.RetractHook();
+                        tDep = !tDep;
+                    }
+                    else
+                    {
+                        toControl.tailHook.ExtendHook();
+                        tDep = !tDep;
+                    }
                 }
             }
 
             //  Launch Bar
             if (Input.GetKeyDown(KeyCode.T))
             {
-                if (toControl.catHook)
+                if (toControl.catHook != null)
                 {
-                    toControl.catHook.Toggle();
+                    if (hDep)
+                    {
+                        toControl.catHook.Retract();
+                        hDep = !hDep;
+                    }
+                    else
+                    {
+                        toControl.catHook.Extend();
+                        hDep = !hDep;
+                    }
                 }
+            }
+
+            // Debug
+            if (Input.GetKeyDown(KeyCode.O))
+            {
+                iA.enabled = !iA.enabled;
             }
 
             // Misc Stuff
@@ -561,7 +630,7 @@ class LOL : VTOLMOD
         }
         if (goOn& !GoOn)
         {
-            GUI.Label(new Rect(20f, 40f, 1500f, 20f), "Available Controllers: " + Stuff);
+            GUI.Label(new Rect(20f, 40f, 150000f, 20f), "Available Controllers: " + Stuff);
             toEdit = GUI.TextField(new Rect(20f, 60f, 1500f, 20f), toEdit, 2000);
             if (GUI.Button(new Rect(1600, 60f, 120, 20), "Control."))
             {
