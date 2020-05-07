@@ -10,6 +10,7 @@ using Harmony;
 
 class LOL : VTOLMOD
 {
+<<<<<<< HEAD
     private string Stuff = "";
     private string toEdit = "What Controller? Delete the text and enter the number next to the controller, then hit the giant button.";
     private string radarTargets = "";
@@ -19,6 +20,17 @@ class LOL : VTOLMOD
     private bool GoOn = false;
     private string speed;
     public string SpeedLabel()
+=======
+    string Stuff = "";
+    string toEdit = "What Controller? Delete the text and enter the number next to the controller, then hit the giant button.";
+    string radarTargets = "";
+    string sRadarTargets = "";
+    string lRadarTargets = "No lock";
+    bool goOn = false;
+    bool GoOn = false;
+    string speed;
+    public string SpeedLabel() // Too Long?
+>>>>>>> c10c0cd3c866a7b14e128bc6540ee64d34d03c44
     {
         switch (MeasurementManager.instance.airspeedMode)
         {
